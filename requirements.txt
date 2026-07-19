@@ -11,3 +11,4 @@ pydantic>=2.7.0
 gnews>=0.3.7
 googlenewsdecoder>=0.1.7
 twstock>=1.4.0
+mcp>=1.28.0

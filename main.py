@@ -143,13 +143,13 @@ def index():
 
 
 @app.post("/chat")
-def chat(req: ChatRequest):
+async def chat(req: ChatRequest):
     message = req.message.strip()
     if not message:
         raise HTTPException(status_code=400, detail="請輸入問題")
 
     try:
-        state = _graph.invoke({"user_input": message})
+        state = await _graph.ainvoke({"user_input": message})
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"處理過程發生錯誤：{e}")
 

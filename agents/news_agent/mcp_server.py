@@ -5,9 +5,12 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
+from mcp.server.fastmcp import FastMCP
 
 from llm import get_llm
 from tools import search_stock_news, _company_name
+
+mcp = FastMCP("news-agent")
 
 
 def _summarize_and_judge(llm, title: str, content: str, company: str) -> dict:
@@ -32,9 +35,7 @@ def _summarize_and_judge(llm, title: str, content: str, company: str) -> dict:
     response = chain.invoke({})
     raw = response.content.strip()
 
-    # Parse JSON from response
     try:
-        # Find first JSON object in response
         start = raw.find("{")
         end = raw.rfind("}") + 1
         if start != -1 and end > start:
@@ -52,13 +53,9 @@ def _summarize_and_judge(llm, title: str, content: str, company: str) -> dict:
     return {"summary": summary, "sentiment": sentiment}
 
 
-def run_stock_news_agent(stock_code: str) -> dict[str, Any]:
-    """
-    news_agent 的核心 skill：
-    1. 用 tool 從 Google 搜尋並爬取前 5 篇新聞
-    2. 對每篇新聞做摘要 + 情緒判斷
-    3. 統計看漲數量並輸出整體結論
-    """
+@mcp.tool()
+def analyze_stock_news(stock_code: str) -> dict[str, Any]:
+    """分析指定台股個股最近的新聞，統計看漲/看跌情緒並給出整體結論。"""
     company = _company_name(stock_code)
     llm = get_llm()
 
@@ -73,7 +70,6 @@ def run_stock_news_agent(stock_code: str) -> dict[str, Any]:
             "conclusion": f"查無股票代碼「{stock_code}」，請確認代碼是否正確。",
         }
 
-    # Step 1: 搜尋新聞
     raw_news: list[dict] = search_stock_news.invoke({"stock_code": stock_code})
 
     if not raw_news:
@@ -87,7 +83,6 @@ def run_stock_news_agent(stock_code: str) -> dict[str, Any]:
             "conclusion": f"找不到「{company}」的近期新聞。",
         }
 
-    # Step 2: 對每篇新聞分析
     articles = []
     for item in raw_news:
         result = _summarize_and_judge(llm, item["title"], item["content"], company)
@@ -99,12 +94,10 @@ def run_stock_news_agent(stock_code: str) -> dict[str, Any]:
             "sentiment": result["sentiment"],
         })
 
-    # Step 3: 統計
     bullish_count = sum(1 for a in articles if a["sentiment"] == "看漲")
     bearish_count = len(articles) - bullish_count
     overall = "看漲" if bullish_count > bearish_count else ("看跌" if bearish_count > bullish_count else "中性")
 
-    # Step 4: LLM 生成整體結論
     summary_text = "\n".join(
         f"{i+1}. [{a['sentiment']}] {a['summary']}"
         for i, a in enumerate(articles)
@@ -131,3 +124,7 @@ def run_stock_news_agent(stock_code: str) -> dict[str, Any]:
         "overall_sentiment": overall,
         "conclusion": conclusion,
     }
+
+
+if __name__ == "__main__":
+    mcp.run()
